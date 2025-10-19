@@ -1,0 +1,70 @@
+# --- Node & package managers ---
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Lockfiles: keep them tracked for reproducible installs
+# (do NOT ignore package-lock.json / yarn.lock / pnpm-lock.yaml)
+
+# --- Env & secrets (never commit secrets) ---
+.env
+.env.*
+!.env.example        # share a template instead
+*.pem
+*.key
+*.crt
+*.pfx
+*.cer
+*.der
+.gpg
+.git-credentials
+
+# --- Build outputs / caches ---
+build/
+dist/
+.eslintcache
+.cache/
+.tmp/
+.temp/
+.pnp/
+.pnp.js
+*.tsbuildinfo
+coverage/
+# Framework-specific (safe to include even if unused)
+.next/
+out/
+.storybook-out/
+
+# --- App-specific local artifacts ---
+backend/uploads/
+uploads/
+dump/                 # db dumps (e.g., mongodump)
+*.sqlite
+*.db
+
+# --- Logs & PIDs ---
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# --- Test runners / E2E ---
+cypress/videos/
+cypress/screenshots/
+playwright-report/
+test-results/
+
+# --- Editors / OS files ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+additional
+steps to build.md
+Network Diagram.png

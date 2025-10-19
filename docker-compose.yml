@@ -1,0 +1,16 @@
+services:
+  backend:
+    build: ./backend
+    container_name: backend-api
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./backend/.env
+  
+  frontend:
+    build: ./frontend
+    container_name: frontend-web
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
