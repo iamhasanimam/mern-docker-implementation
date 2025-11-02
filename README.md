@@ -11,13 +11,13 @@
 
 ## Table of Contents
 
-- [Architecture Overview](#-architecture-overview)
-- [Prerequisites](#-prerequisites)
-- [Quick Start](#-quick-start)
-- [Deployment Phases](#-deployment-phases)
-- [Verification Checklist](#-verification-checklist)
-- [Troubleshooting](#-troubleshooting)
-- [Learning Outcomes](#-learning-outcomes)
+- [Architecture Overview](#architecture-overview)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Deployment Phases](#deployment-phases)
+- [Verification Checklist](#verification-checklist)
+- [Troubleshooting](#troubleshooting)
+- [Learning Outcomes](#learning-outcomes)
 
 ---
 
