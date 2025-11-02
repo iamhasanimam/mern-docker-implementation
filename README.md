@@ -1,5 +1,7 @@
 # MERN on AWS — Full Deployment Runbook
-![alt text](<Dockerized app on aws.png>)
+
+![alt text](Mern-Docker-Architectue.png)
+
 ## Reference path
 
 ```
