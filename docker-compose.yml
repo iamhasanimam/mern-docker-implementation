@@ -1,16 +1,65 @@
+version: '"3.9'
+
+networks:
+  app_net:
+    driver: bridge
+
+volumes:
+  nginx_logs:
+  api_logs:
+
 services:
-  backend:
-    build: ./backend
-    container_name: backend-api
+  proxy:
+    image: nginx:alpine
+    container_name: nginx_proxy
     ports:
-      - "5000:5000"
+      - "8888:8888"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - frontend1
+      - frontend2
+      - backend1
+      - backend2
+    networks:
+      - app_net
+
+  frontend1:
+    build: ./frontend
+    container_name: fe1
+    expose:
+      - 80
+    networks:
+      - app_net
+
+  frontend2:
+    build: ./frontend
+    container_name: fe2
+    expose:
+      - 80
+    networks:
+      - app_net
+
+  backend1:
+    build: ./backend
+    container_name: backend-api-1
+    expose:
+      - 5000
+    volumes:
+      - api_logs:/usr/src/app/logs
     env_file:
       - ./backend/.env
-  
-  frontend:
-    build: ./frontend
-    container_name: frontend-web
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
+    networks:
+      - app_net
+  backend2:
+    build: ./backend
+    container_name: backend-api-2
+    expose:
+      - 5000
+    volumes:
+      - api_logs:/usr/src/app/logs
+    env_file:
+      - ./backend/.env
+    networks:
+      - app_net

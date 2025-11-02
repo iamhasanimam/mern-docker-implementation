@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import { randomUUID as uuid } from "node:crypto";
-
+import accessLogger from "./access-logs.js";
 dotenv.config()
 
 async function start() {
@@ -23,7 +23,10 @@ async function start() {
   );
 
   const app = express();
+  app.use(accessLogger);
   const PORT = process.env.PORT || 5000;
+ 
+  app.use(express.json());
 
   app.use("/", cors({
     origin: ["https://app.lauv.in", "http://localhost:3000"],
@@ -31,8 +34,7 @@ async function start() {
     allowedHeaders:["Content-Type", "Authorization"]
   }));
   
-  app.use(express.json());
-
+  
   app.get("/api/health", async (_req, res) => {
     try { await mongoose.connection.db.admin().ping();
       res.json({ ok: true, driver: "mongo", uptime: process.uptime() });
@@ -82,8 +84,8 @@ async function start() {
   app.listen(PORT,'0.0.0.0', () => console.log(`http://localhost:${PORT}`));
 }
 
-start().catch((e) => {
-  console.error("Failed to start server:", e);
+start().catch((error) => {
+  console.error("Failed to start server:", error);
   process.exit(1);
 });
 
