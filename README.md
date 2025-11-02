@@ -1,6 +1,6 @@
 # MERN on AWS — Full Deployment Runbook
 
-![alt text](Mern-Docker-Architectue.png)
+![alt text](Mern-Docker-Architecture.png)
 
 ## Reference path
 
