@@ -296,21 +296,31 @@ docker compose exec proxy cat /var/log/nginx/access_app.log | jq
 
 ---
 
-### Phase 2️: Request Correlation & Observability
+### # Phase 2: Request Correlation & Log Matching
 
-**Goal:** Implement end-to-end request tracing.
+**Goal:** Trace one request from Nginx → Backend using a shared `X-Request-ID`.
 
 <details>
 <summary>Click to expand Phase 2</summary>
 
-#### Add Request Logging Middleware
+## Why it matters
+
+In production, debugging without correlation IDs = guesswork. Correlation IDs let you:
+- Trace one request across logs
+- Debug latency & failures
+- Observe proxy → service flow
+
+## Step 1: Backend Middleware
+
+**File:** `backend/request-logs.js`
 
 ```javascript
-// backend/middleware/requestLog.js
 export default function requestLog(req, res, next) {
   const rid = req.headers['x-request-id'] || 'no-rid';
   const xff = req.headers['x-forwarded-for'] || req.ip;
-  
+
+  req.id = rid; // attach for future logs/errors
+
   console.log(JSON.stringify({
     timestamp: new Date().toISOString(),
     requestId: rid,
@@ -319,30 +329,105 @@ export default function requestLog(req, res, next) {
     path: req.originalUrl,
     userAgent: req.headers['user-agent']
   }));
-  
+
   next();
 }
+```
 
-// backend/server.js
-import requestLog from './middleware/requestLog.js';
+**File:** `backend/server.js`
+
+```javascript
+import requestLog from './request-log.js';
 app.use(requestLog);
 ```
 
-#### Testing Correlation
+## Step 2: Nginx Headers
 
-```bash
-# Make request with custom header
-curl -H "X-Test: correlation" http://localhost:8888/api/health
+In `location /api/` & `/` blocks ensure:
 
-# Compare request IDs
-docker compose exec proxy grep "correlation" /var/log/nginx/access_app.log | jq .req_id
-docker compose logs backend1 | grep "correlation" | jq .requestId
-# Both should show the same request ID
+```nginx
+proxy_set_header X-Request-ID $reqid;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 ```
 
-#### Success Criteria
-- Same `X-Request-ID` appears in Nginx and backend logs
-- JSON structured logs in both layers
+And enable JSON logging:
+
+```nginx
+access_log /var/log/nginx/access_app.log json;
+```
+
+## Step 3: Trigger Request
+
+```bash
+curl -I http://localhost:8888/api/health
+```
+
+## Step 4: Verify Logs
+
+Scroll and locate the `requestId` that matches the curl request.
+
+### Nginx (enter container and read log file)
+
+```bash
+docker compose exec proxy sh
+cd /var/log/nginx
+cat access_app.log
+```
+
+Search for the same `req_id` in this file.
+
+### Backend (view container logs)
+
+```bash
+docker compose logs backend1 backend2 | grep f3da8b9048e0dfae0ca8346720c73dd5
+```
+
+**If both match — correlation succeeded!**
+
+## Example Output
+
+### Backend Log
+
+```json
+{
+  "timestamp": "2025-11-04T10:47:26.512Z",
+  "requestId": "f3da8b9048e0dfae0ca8346720c73dd5",
+  "ip": "172.21.0.1",
+  "method": "GET",
+  "path": "/api/health",
+  "userAgent": "curl/8.14.1"
+}
+```
+
+### Nginx Log
+
+```json
+{
+  "time": "04/Nov/2025:10:47:26 +0000",
+  "ip": "172.21.0.1",
+  "method": "GET",
+  "uri": "/api/health",
+  "status": 200,
+  "bytes": 50,
+  "user_agent": "curl/8.14.1",
+  "xff": "172.21.0.1",
+  "req_id": "f3da8b9048e0dfae0ca8346720c73dd5",
+  "upstream": "172.21.0.4:5000",
+  "rt": "0.173",
+  "urt": "0.172"
+}
+```
+
+### Same Request ID = Correlation Success
+
+`f3da8b9048e0dfae0ca8346720c73dd5` appears in both layers
+
+## Result
+
+You now have real distributed tracing:
+- Request IDs passed edge → backend
+- JSON structured logs
+- Proof of correlation verified
 
 </details>
 

@@ -4,6 +4,7 @@ import cors from "cors";
 import mongoose from "mongoose";
 import { randomUUID as uuid } from "node:crypto";
 import accessLogger from "./access-logs.js";
+import requestLog from "./request-logs.js";
 dotenv.config()
 
 async function start() {
@@ -24,6 +25,8 @@ async function start() {
 
   const app = express();
   app.use(accessLogger);
+  app.use(requestLog);
+
   const PORT = process.env.PORT || 5000;
  
   app.use(express.json());
