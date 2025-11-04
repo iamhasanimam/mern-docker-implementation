@@ -41,5 +41,5 @@ export default function accessLogger(req, res, next) {
 // Nginx Proxy (172.18.0.3)
 //    ↓ appends "X-Forwarded-For: 103.45.x.x, 10.0.1.25"
 // Node/Express
-//    ↓ reads first IP = 103.45.x.x ✅
+//    ↓ reads first IP = 103.45.x.x 
 // it gets the first ip req.headers["x-forwarded-for"]?.split(",")[0] 
