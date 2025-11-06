@@ -433,102 +433,335 @@ You now have real distributed tracing:
 
 ---
 
-### Phase 3️: AWS Network Foundation
+### Phase 3: AWS VPC Network Foundation
 
-**Goal:** Create secure VPC with public and private subnets.
+**Goal:** Create a secure VPC with public and private subnets to host ALB, NAT Gateway, and EC2/ECS workloads.
 
 <details>
 <summary>Click to expand Phase 3</summary>
 
-#### VPC Architecture
+## Overview
+
+This phase establishes the network foundation for a production-grade AWS infrastructure. The VPC architecture implements network isolation with public subnets for internet-facing resources and private subnets for application workloads.
+
+**Key components:**
+- Public subnet for Application Load Balancer and NAT Gateway
+- Private subnet for EC2 instances and future ECS tasks
+- Internet Gateway for public subnet connectivity
+- NAT Gateway for private subnet outbound access
+- Route tables enforcing traffic segmentation
+- Security groups implementing least-privilege access
+
+---
+
+## Architecture
 
 ```
 VPC: 10.0.0.0/16
-├── Public Subnets (2 AZs)
-│   ├── 10.0.1.0/24 (us-east-1a)
-│   └── Resources: ALB, NAT Gateway
-└── Private Subnets (2 AZs)
-    ├── 10.0.2.0/24 (us-east-1a)
-    └── Resource: EC2 instances
+│
+├── Public Subnet (10.0.1.0/24 - us-east-1a)
+│   ├── Internet Gateway
+│   ├── Application Load Balancer
+│   └── NAT Gateway
+│
+└── Private Subnet (10.0.2.0/24 - us-east-1a)
+    └── EC2 Instances (Application Tier)
 ```
 
-#### Setup Steps
+**Design principles:**
+- Single Availability Zone deployment (expandable to multi-AZ)
+- Private subnet instances have no direct internet access
+- All outbound traffic from private subnet routes through NAT Gateway
+- Public subnet hosts only load balancers and NAT devices
 
-1. **Create VPC**
-   - CIDR: `10.0.0.0/16`
-   - Enable DNS hostnames
-   - Enable DNS resolution
+---
 
-2. **Create Subnets**
-   ```bash
-   # Public subnets
-   aws ec2 create-subnet --vpc-id vpc-xxx --cidr-block 10.0.1.0/24 --availability-zone us-east-1a
-   aws ec2 create-subnet --vpc-id vpc-xxx --cidr-block 10.0.2.0/24 --availability-zone us-east-1b
-   
-   # Private subnets
-   aws ec2 create-subnet --vpc-id vpc-xxx --cidr-block 10.0.11.0/24 --availability-zone us-east-1a
-   aws ec2 create-subnet --vpc-id vpc-xxx --cidr-block 10.0.12.0/24 --availability-zone us-east-1b
-   ```
+## Implementation
 
-3. **Create Internet Gateway**
-   ```bash
-   aws ec2 create-internet-gateway
-   aws ec2 attach-internet-gateway --vpc-id vpc-xxx --internet-gateway-id igw-xxx
-   ```
+### Step 1: Create VPC
 
-4. **Create NAT Gateway**
-   ```bash
-   # Allocate Elastic IP
-   aws ec2 allocate-address --domain vpc
-   
-   # Create NAT Gateway in public subnet
-   aws ec2 create-nat-gateway \
-     --subnet-id subnet-public-xxx \
-     --allocation-id eipalloc-xxx
-   ```
+Create a VPC with sufficient address space for current and future subnets.
 
-5. **Configure Route Tables**
-   ```bash
-   # Public route table
-   aws ec2 create-route --route-table-id rtb-public-xxx \
-     --destination-cidr-block 0.0.0.0/0 \
-     --gateway-id igw-xxx
-   
-   # Private route table
-   aws ec2 create-route --route-table-id rtb-private-xxx \
-     --destination-cidr-block 0.0.0.0/0 \
-     --nat-gateway-id nat-xxx
-   ```
+**Configuration:**
+- CIDR Block: `10.0.0.0/16`
+- Enable DNS Hostnames: Yes
+- Enable DNS Resolution: Yes
 
-6. **Create Security Groups**
+```bash
+aws ec2 create-vpc \
+  --cidr-block 10.0.0.0/16 \
+  --enable-dns-hostnames \
+  --enable-dns-support
+```
 
-   **ALB Security Group**
-   ```bash
-   # Inbound
-   - HTTP (80) from 0.0.0.0/0
-   - HTTPS (443) from 0.0.0.0/0
-   
-   # Outbound
-   - 8888 to EC2-SG
-   ```
+---
 
-   **EC2 Security Group**
-   ```bash
-   # Inbound
-   - 8888 from ALB-SG only
-   
-   # Outbound
-   - All traffic to 0.0.0.0/0 (for NAT access)
-   ```
+### Step 2: Create Subnets
 
-#### Success Criteria
-- VPC has both Internet Gateway and NAT Gateway
-- Public subnets route to IGW
-- Private subnets route to NAT
-- Security groups enforce least privilege
+Create one public and one private subnet in the same availability zone.
+
+#### Public Subnet
+- CIDR: `10.0.1.0/24`
+- Availability Zone: `us-east-1a`
+- Auto-assign Public IPv4: Disabled (explicit EIP allocation)
+
+#### Private Subnet
+- CIDR: `10.0.2.0/24`
+- Availability Zone: `us-east-1a`
+- Auto-assign Public IPv4: Disabled
+
+```bash
+# Create public subnet
+aws ec2 create-subnet \
+  --vpc-id vpc-xxxxxxxxx \
+  --cidr-block 10.0.1.0/24 \
+  --availability-zone us-east-1a
+
+# Create private subnet
+aws ec2 create-subnet \
+  --vpc-id vpc-xxxxxxxxx \
+  --cidr-block 10.0.2.0/24 \
+  --availability-zone us-east-1a
+```
+
+---
+
+### Step 3: Create and Attach Internet Gateway
+
+The Internet Gateway enables communication between the VPC and the internet.
+
+```bash
+# Create Internet Gateway
+aws ec2 create-internet-gateway
+
+# Attach to VPC
+aws ec2 attach-internet-gateway \
+  --vpc-id vpc-xxxxxxxxx \
+  --internet-gateway-id igw-xxxxxxxxx
+```
+
+---
+
+### Step 4: Create NAT Gateway
+
+The NAT Gateway allows instances in private subnets to access the internet for updates and external API calls while remaining unreachable from the internet.
+
+**Prerequisites:**
+- NAT Gateway must be deployed in the public subnet
+- Requires an Elastic IP address
+
+```bash
+# Allocate Elastic IP
+aws ec2 allocate-address --domain vpc
+
+# Create NAT Gateway in public subnet
+aws ec2 create-nat-gateway \
+  --subnet-id subnet-public-xxxxxxxxx \
+  --allocation-id eipalloc-xxxxxxxxx
+```
+
+**Note:** NAT Gateway provisioning takes 5-10 minutes. Verify status before updating route tables.
+
+---
+
+### Step 5: Configure Route Tables
+
+#### Public Route Table
+
+The public route table directs internet-bound traffic to the Internet Gateway.
+
+| Destination | Target | Purpose |
+|------------|--------|---------|
+| `10.0.0.0/16` | local | Intra-VPC communication |
+| `0.0.0.0/0` | Internet Gateway | Internet access |
+
+```bash
+# Create route to Internet Gateway
+aws ec2 create-route \
+  --route-table-id rtb-public-xxxxxxxxx \
+  --destination-cidr-block 0.0.0.0/0 \
+  --gateway-id igw-xxxxxxxxx
+
+# Associate with public subnet
+aws ec2 associate-route-table \
+  --route-table-id rtb-public-xxxxxxxxx \
+  --subnet-id subnet-public-xxxxxxxxx
+```
+
+#### Private Route Table
+
+The private route table directs internet-bound traffic through the NAT Gateway.
+
+| Destination | Target | Purpose |
+|------------|--------|---------|
+| `10.0.0.0/16` | local | Intra-VPC communication |
+| `0.0.0.0/0` | NAT Gateway | Outbound internet access |
+
+```bash
+# Create route to NAT Gateway
+aws ec2 create-route \
+  --route-table-id rtb-private-xxxxxxxxx \
+  --destination-cidr-block 0.0.0.0/0 \
+  --nat-gateway-id nat-xxxxxxxxx
+
+# Associate with private subnet
+aws ec2 associate-route-table \
+  --route-table-id rtb-private-xxxxxxxxx \
+  --subnet-id subnet-private-xxxxxxxxx
+```
+
+---
+
+### Step 6: Configure Security Groups
+
+#### ALB Security Group
+
+Controls inbound traffic to the Application Load Balancer.
+
+**Inbound Rules:**
+- HTTP (80) from `0.0.0.0/0`
+- HTTPS (443) from `0.0.0.0/0`
+
+**Outbound Rules:**
+- Port 8888 to EC2 Security Group
+
+```bash
+aws ec2 create-security-group \
+  --group-name alb-sg \
+  --description "Security group for Application Load Balancer" \
+  --vpc-id vpc-xxxxxxxxx
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-alb-xxxxxxxxx \
+  --protocol tcp \
+  --port 80 \
+  --cidr 0.0.0.0/0
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-alb-xxxxxxxxx \
+  --protocol tcp \
+  --port 443 \
+  --cidr 0.0.0.0/0
+```
+
+#### EC2 Security Group
+
+Controls traffic to EC2 instances in the private subnet.
+
+**Inbound Rules:**
+- Port 8888 from ALB Security Group only
+
+**Outbound Rules:**
+- All traffic to `0.0.0.0/0` (via NAT Gateway)
+
+```bash
+aws ec2 create-security-group \
+  --group-name ec2-app-sg \
+  --description "Security group for application EC2 instances" \
+  --vpc-id vpc-xxxxxxxxx
+
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-ec2-xxxxxxxxx \
+  --protocol tcp \
+  --port 8888 \
+  --source-group sg-alb-xxxxxxxxx
+```
+
+---
+
+## Verification
+
+### Validate VPC Configuration
+
+```bash
+# Verify VPC
+aws ec2 describe-vpcs --vpc-ids vpc-xxxxxxxxx
+
+# Verify subnets
+aws ec2 describe-subnets --filters "Name=vpc-id,Values=vpc-xxxxxxxxx"
+
+# Verify Internet Gateway
+aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=vpc-xxxxxxxxx"
+
+# Verify NAT Gateway
+aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=vpc-xxxxxxxxx"
+```
+
+### Test Connectivity
+
+1. Launch a test EC2 instance in the private subnet
+2. Verify outbound internet access through NAT Gateway
+3. Confirm instance is not directly accessible from the internet
+4. Validate security group rules are enforcing proper access control
+
+---
+
+## Success Criteria
+
+- VPC created with DNS resolution enabled
+- Public subnet with route to Internet Gateway
+- Private subnet with route to NAT Gateway
+- Internet Gateway attached to VPC
+- NAT Gateway operational in public subnet
+- Security groups enforce least-privilege access
+- Private instances cannot receive inbound traffic from internet
+- Private instances can initiate outbound connections via NAT
+
+---
+
+## Cost Considerations
+
+**NAT Gateway:** Charged per hour and per GB of data processed. Consider these optimizations:
+
+- Use NAT Gateway instead of NAT instances for production
+- Monitor data transfer costs through CloudWatch
+- Consider VPC endpoints for AWS service access to reduce NAT costs
+
+**Estimated monthly cost for single NAT Gateway in us-east-1:**
+- Hourly charge: ~$32/month
+- Data processing: $0.045 per GB
+
+---
+
+## Multi-AZ Expansion
+
+To extend this architecture across multiple availability zones:
+
+1. Create additional subnets in us-east-1b:
+   - Public: `10.0.11.0/24`
+   - Private: `10.0.12.0/24`
+
+2. Deploy second NAT Gateway in us-east-1b public subnet
+
+3. Create separate route table for us-east-1b private subnet
+
+4. Update ALB to span both availability zones
+
+---
+
+## Next Steps
+
+**Phase 4:** EC2 instance deployment
+- Launch EC2 instances in private subnet
+- Configure Docker and application runtime
+- Implement health checks
+
+**Phase 5:** Application Load Balancer setup
+- Create target groups
+- Configure routing rules
+- Implement SSL/TLS termination
+
+**Phase 6:** Monitoring and logging
+- Enable VPC Flow Logs
+- Configure CloudWatch alarms
+- Set up centralized logging
+
+**Phase 7:** Container orchestration migration
+- Transition from Docker to ECS
+- Implement Fargate tasks
+- Configure service auto-scaling
 
 </details>
-
 ---
 
 ### Phase 4: Private EC2 with Docker
