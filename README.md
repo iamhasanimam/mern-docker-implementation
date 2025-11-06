@@ -296,7 +296,7 @@ docker compose exec proxy cat /var/log/nginx/access_app.log | jq
 
 ---
 
-### # Phase 2: Request Correlation & Log Matching
+###  Phase 2: Request Correlation & Log Matching
 
 **Goal:** Trace one request from Nginx → Backend using a shared `X-Request-ID`.
 
@@ -739,29 +739,8 @@ To extend this architecture across multiple availability zones:
 
 ---
 
-## Next Steps
-
-**Phase 4:** EC2 instance deployment
-- Launch EC2 instances in private subnet
-- Configure Docker and application runtime
-- Implement health checks
-
-**Phase 5:** Application Load Balancer setup
-- Create target groups
-- Configure routing rules
-- Implement SSL/TLS termination
-
-**Phase 6:** Monitoring and logging
-- Enable VPC Flow Logs
-- Configure CloudWatch alarms
-- Set up centralized logging
-
-**Phase 7:** Container orchestration migration
-- Transition from Docker to ECS
-- Implement Fargate tasks
-- Configure service auto-scaling
-
 </details>
+
 ---
 
 ### Phase 4: Private EC2 with Docker
@@ -877,122 +856,432 @@ curl localhost:8888/health
 
 ---
 
-### Phase 5️: Application Load Balancer & TLS
+### # Phase 5: Application Load Balancer & TLS Setup
 
-**Goal:** Expose application securely via HTTPS.
+**Goal**: Get `https://app.lauv.in` working securely with a real SSL certificate
 
 <details>
 <summary>Click to expand Phase 5</summary>
 
-#### 1. Request ACM Certificate
+**What You'll Do**:
+- Request a free SSL certificate from AWS
+- Create a Target Group (think of it as a "pool" of servers)
+- Set up an Application Load Balancer (the traffic director)
+- Point your domain to the load balancer
 
-```bash
-aws acm request-certificate \
-  --domain-name app.lauv.in \
-  --validation-method DNS \
-  --region us-east-1
+**Time Needed**: 30-45 minutes (mostly waiting for DNS propagation)
+
+---
+
+## Step 1: Request Your SSL Certificate (ACM)
+
+SSL certificates make the little padlock appear in browsers. AWS gives them for free.
+
+### 1.1 Open Certificate Manager
+1. Log into **AWS Console**
+2. Search for **"Certificate Manager"** in the top search bar
+3. Click on **AWS Certificate Manager**
+4. **IMPORTANT**: Check top-right corner - switch region to **US East (N. Virginia)** if your ALB is there
+   - ACM certificate MUST be in the same region as your ALB
+
+### 1.2 Request Certificate
+1. Click the orange **"Request"** button (or "Request a certificate")
+2. Choose **"Request a public certificate"** and click **Next**
+
+### 1.3 Configure Domain
+1. **Domain name**: Type `app.lauv.in`
+   - Don't add `https://` or `www.`
+   - Just the bare domain
+2. Click **Add another name to this certificate** if you want `www.app.lauv.in` too (optional)
+3. **Validation method**: Select **DNS validation**
+   - This is easier and automatic
+4. **Key algorithm**: Leave as **RSA 2048** (default)
+5. Click **Request**
+
+### 1.4 Validate Your Domain
+AWS needs to verify you own the domain:
+
+1. You'll see a page saying "Pending validation"
+2. Click on your certificate ARN (looks like `arn:aws:acm:us-east-1:...`)
+3. Scroll down to **Domains** section
+4. Click **Create records in Route 53** button (orange button)
+   - If you don't see this button, your domain must be in Route 53 first
+5. A modal appears - click **Create records**
+6. Wait 5-10 minutes - status will change from "Pending" to **"Issued"**
+
+**Take a break** - Go grab coffee while DNS propagates
+
+---
+
+## Step 2: Create Target Group
+
+Think of this as creating a "basket" where you'll put your EC2 instance. The ALB will send traffic to this basket.
+
+### 2.1 Navigate to Target Groups
+1. Search for **"EC2"** in AWS Console
+2. In the left sidebar, scroll down to **Load Balancing** section
+3. Click **Target Groups**
+
+### 2.2 Create New Target Group
+1. Click **Create target group** (blue button, top-right)
+
+### 2.3 Basic Configuration
+**Step 1: Specify group details**
+
+1. **Choose a target type**:
+   - Select **Instances** (first option)
+   
+2. **Target group name**: Type `mern-app-tg`
+   - Use something descriptive
+   
+3. **Protocol**: Select **HTTP**
+   
+4. **Port**: Type `8888`
+   - This is the port Nginx listens on in your EC2
+
+5. **VPC**: Select your VPC (the one where your EC2 lives)
+
+6. **Protocol version**: Leave as **HTTP1** (default)
+
+### 2.4 Health Check Settings
+Scroll down to **Health checks** section:
+
+1. **Health check protocol**: HTTP (already selected)
+
+2. **Health check path**: Type `/health`
+   - This endpoint returns 200 OK in your app
+
+3. Click **Advanced health check settings** to expand:
+   - **Healthy threshold**: `2` (how many checks must pass)
+   - **Unhealthy threshold**: `3` (how many must fail)
+   - **Timeout**: `5` seconds
+   - **Interval**: `30` seconds
+   - **Success codes**: Type `200`
+
+4. Click **Next** (bottom-right)
+
+### 2.5 Register Targets
+**Step 2: Register targets**
+
+1. Find your EC2 instance in the list
+2. **Select the checkbox** next to your instance
+3. Click **Include as pending below** button
+4. You'll see your instance appear in "Review targets" section below
+5. Click **Create target group** (blue button)
+
+**Success!** You'll see "Successfully created target group"
+
+**Wait 1-2 minutes** then refresh - status should become **Healthy**
+
+---
+
+## Step 3: Create Application Load Balancer
+
+This is the main event - the traffic director for your app.
+
+### 3.1 Navigate to Load Balancers
+1. In EC2 Console sidebar (left), under **Load Balancing**
+2. Click **Load Balancers**
+
+### 3.2 Create Load Balancer
+1. Click **Create Load Balancer** (orange button)
+2. You'll see 4 types - select **Application Load Balancer**
+3. Click **Create** under ALB card
+
+### 3.3 Basic Configuration
+**Step 1: Configure Load Balancer**
+
+1. **Load balancer name**: Type `mern-app-alb`
+
+2. **Scheme**: Select **Internet-facing**
+   - Your app needs to be accessible from the internet
+
+3. **IP address type**: Select **IPv4**
+
+### 3.4 Network Mapping
+Scroll to **Network mapping**:
+
+1. **VPC**: Select your VPC
+
+2. **Mappings**: 
+   - Check **at least 2 Availability Zones**
+   - For each AZ, select your **PUBLIC subnets**
+   - Why public? ALB needs internet access to receive traffic
+
+Example:
+```
+[X] us-east-1a → subnet-public-1
+[X] us-east-1b → subnet-public-2
 ```
 
-Add DNS validation records to Route 53.
+### 3.5 Security Groups
+1. Click **Create new security group** (opens new tab)
 
-#### 2. Create Target Group
+**In the new tab:**
 
-```bash
-aws elbv2 create-target-group \
-  --name mern-app-tg \
-  --protocol HTTP \
-  --port 8888 \
-  --vpc-id vpc-xxx \
-  --health-check-enabled \
-  --health-check-path /health \
-  --health-check-interval-seconds 30 \
-  --healthy-threshold-count 2 \
-  --unhealthy-threshold-count 3
+1. **Security group name**: `mern-alb-sg`
+2. **Description**: "Allow HTTPS and HTTP for ALB"
+3. **VPC**: Select your VPC
+
+**Inbound rules** - Click "Add rule" twice:
+
+| Type  | Protocol | Port | Source    | Description |
+|-------|----------|------|-----------|-------------|
+| HTTP  | TCP      | 80   | 0.0.0.0/0 | Allow HTTP  |
+| HTTPS | TCP      | 443  | 0.0.0.0/0 | Allow HTTPS |
+
+4. Click **Create security group**
+5. Copy the **Security Group ID** (sg-xxxxx)
+6. **Go back to ALB tab**
+7. Click the refresh icon next to Security Groups dropdown
+8. Select your new `mern-alb-sg`
+
+### 3.6 Listeners and Routing
+Scroll to **Listeners and routing**:
+
+You'll see a default listener:
+- **Protocol**: HTTP
+- **Port**: 80
+
+1. **Default action**: Select your target group `mern-app-tg` from dropdown
+
+2. Click **Add listener** button
+
+**For the new listener:**
+- **Protocol**: Select **HTTPS**
+- **Port**: `443`
+- **Default action**: Select `mern-app-tg`
+
+3. Scroll down to **Secure listener settings**
+   - **Security policy**: Leave default (ELBSecurityPolicy-2016-08)
+   - **Default SSL/TLS certificate**: Select **From ACM**
+   - Choose your certificate `app.lauv.in` from dropdown
+
+### 3.7 Create ALB
+1. Scroll to bottom
+2. Click **Create load balancer** (orange button)
+3. Success message appears
+
+**Wait 3-5 minutes** - Status will change from "Provisioning" to **"Active"**
+
+### 3.8 Copy ALB DNS Name
+1. Click on your ALB name `mern-app-alb`
+2. In the **Description** tab, find **DNS name**
+3. Copy it - looks like: `mern-app-alb-123456789.us-east-1.elb.amazonaws.com`
+
+---
+
+## Step 4: Set Up HTTP to HTTPS Redirect
+
+Right now, HTTP (port 80) goes to your target. Let's make it redirect to HTTPS instead.
+
+### 4.1 Edit HTTP Listener
+1. Still in your ALB details page
+2. Click **Listeners** tab
+3. Find the **HTTP:80** listener
+4. Select the checkbox
+5. Click **Actions** dropdown and select **Edit listener**
+
+### 4.2 Configure Redirect
+1. Delete the existing "Forward to" action:
+   - Find the action row
+   - Click the trash icon
+
+2. Click **Add action** dropdown and select **Redirect to URL**
+
+3. Fill in:
+   - **Protocol**: `HTTPS`
+   - **Port**: `443`
+   - **Status code**: `301 - Permanently moved`
+
+4. Click **Save changes**
+
+Now all HTTP traffic auto-redirects to HTTPS.
+
+---
+
+## Step 5: Update Security Groups
+
+Your EC2's security group needs to allow traffic from the ALB.
+
+### 5.1 Find Your EC2 Security Group
+1. Go to **EC2 Console** and click **Instances**
+2. Click your instance
+3. Click **Security** tab
+4. Click on the Security Group name (opens SG page)
+
+### 5.2 Add Inbound Rule
+1. Click **Edit inbound rules**
+2. Click **Add rule**
+
+Fill in:
+- **Type**: Custom TCP
+- **Port range**: `8888`
+- **Source**: Click the dropdown and choose **Custom**
+  - Start typing your ALB security group ID (`sg-xxxxx`)
+  - Select it from dropdown
+- **Description**: "Allow traffic from ALB"
+
+3. Click **Save rules**
+
+---
+
+## Step 6: Point Domain to ALB (Route 53)
+
+Final step - tell the world where `app.lauv.in` lives.
+
+### 6.1 Open Route 53
+1. Search for **"Route 53"** in AWS Console
+2. Click **Hosted zones** (left sidebar)
+3. Click on your domain `lauv.in`
+
+### 6.2 Create A Record
+1. Click **Create record** (orange button)
+
+**Quick create method:**
+1. **Record name**: Type `app`
+   - This creates `app.lauv.in`
+
+2. **Record type**: Select **A - Routes traffic to IPv4**
+
+3. **Toggle ON** the switch: **Alias** (important!)
+
+4. **Route traffic to**:
+   - Select **Alias to Application and Classic Load Balancer**
+   - **Region**: Choose your ALB's region (e.g., US East N. Virginia)
+   - **Load balancer**: Select your ALB from dropdown
+     - Should show `dualstack.mern-app-alb-...`
+
+5. **Routing policy**: Simple routing (default)
+
+6. **Evaluate target health**: Toggle **ON**
+
+7. Click **Create records**
+
+---
+
+## Step 7: Testing & Verification
+
+### 7.1 Wait for DNS Propagation
+This takes **5-15 minutes**. Be patient.
+
+Check DNS:
+1. Open **Command Prompt** (Windows) or **Terminal** (Mac/Linux)
+2. Type: `nslookup app.lauv.in`
+3. You should see your ALB's IP addresses
+
+### 7.2 Test HTTP Redirect
+1. Open browser
+2. Visit: `http://app.lauv.in` (without 's')
+3. URL should auto-change to `https://app.lauv.in`
+4. You should see a padlock in the address bar
+
+### 7.3 Test Application
+Try these URLs in your browser:
+
+- `https://app.lauv.in/health` - Should return "OK" or 200
+- `https://app.lauv.in/api/health` - Should return JSON: `{"ok": true}`
+- `https://app.lauv.in/` - Your frontend should load
+
+### 7.4 Check Target Health
+1. Go back to **EC2 Console** and click **Target Groups**
+2. Click `mern-app-tg`
+3. Click **Targets** tab
+4. Your instance should show **Healthy**
+
+**If Unhealthy:**
+- Check your EC2's security group (allows port 8888 from ALB?)
+- SSH into EC2: `docker ps` - are containers running?
+- Check logs: `docker logs mern_proxy_1`
+
+---
+
+## Success Checklist
+
+- [ ] ACM certificate shows **"Issued"** status
+- [ ] Target Group shows instance as **"Healthy"**
+- [ ] ALB status is **"Active"**
+- [ ] HTTP listener redirects to HTTPS
+- [ ] HTTPS listener has ACM certificate attached
+- [ ] DNS resolves: `nslookup app.lauv.in` returns IPs
+- [ ] Browser shows padlock at `https://app.lauv.in`
+- [ ] `/health` returns 200 OK
+- [ ] `/api/health` returns JSON
+- [ ] Frontend loads at root path `/`
+
+---
+
+## Common Issues & Fixes
+
+### Problem: "502 Bad Gateway"
+**Cause**: ALB can't reach your EC2
+
+**Fix**:
+1. Check Target Group health (is it "Unhealthy"?)
+2. Verify EC2 security group allows port 8888 from ALB's security group
+3. SSH to EC2: `docker ps` - are containers running?
+4. Check: `curl localhost:8888/health` - does it respond?
+
+### Problem: "Certificate pending validation"
+**Cause**: DNS records not created
+
+**Fix**:
+1. Go to ACM and click certificate
+2. Click "Create records in Route 53" again
+3. Wait 10 minutes and refresh
+
+### Problem: "DNS_PROBE_FINISHED_NXDOMAIN"
+**Cause**: DNS not propagated yet
+
+**Fix**:
+1. Wait 15-30 minutes
+2. Clear browser cache (Ctrl+Shift+Delete)
+3. Try: `nslookup app.lauv.in` - do you see IPs?
+
+### Problem: "Cannot select certificate in ALB listener"
+**Cause**: Certificate in wrong region
+
+**Fix**:
+1. Check ALB region (top-right of console)
+2. Go to ACM - switch to SAME region
+3. Request certificate again in correct region
+
+### Problem: "Connection timeout"
+**Cause**: ALB in wrong subnets
+
+**Fix**:
+1. Edit ALB and go to Network mapping
+2. Ensure you selected **public subnets** (with Internet Gateway route)
+3. Check ALB's security group allows 80/443 from internet (0.0.0.0/0)
+
+---
+
+## What You Just Built
+
+```
+Internet
+   ↓
+Route 53 (app.lauv.in)
+   ↓
+Application Load Balancer
+   ↓ (HTTPS terminated here)
+Target Group (HTTP)
+   ↓ (port 8888)
+EC2 Instance
+   ↓
+Docker (Nginx Proxy)
+   ↓
+Backend Containers
 ```
 
-#### 3. Create Application Load Balancer
+**Key Achievements**:
+- Free SSL certificate (no more "Not Secure" warnings)
+- Automatic HTTP to HTTPS redirect
+- Health checks (ALB only sends traffic to healthy servers)
+- Production-ready domain setup
+- Foundation for scaling (can add more instances to target group)
 
-```bash
-aws elbv2 create-load-balancer \
-  --name mern-app-alb \
-  --subnets subnet-public-1-xxx subnet-public-2-xxx \
-  --security-groups sg-alb-xxx \
-  --scheme internet-facing \
-  --type application
-```
-
-#### 4. Create Listeners
-
-```bash
-# HTTP → HTTPS Redirect
-aws elbv2 create-listener \
-  --load-balancer-arn arn:aws:elasticloadbalancing:... \
-  --protocol HTTP \
-  --port 80 \
-  --default-actions Type=redirect,RedirectConfig={Protocol=HTTPS,Port=443,StatusCode=HTTP_301}
-
-# HTTPS → Target Group
-aws elbv2 create-listener \
-  --load-balancer-arn arn:aws:elasticloadbalancing:... \
-  --protocol HTTPS \
-  --port 443 \
-  --certificates CertificateArn=arn:aws:acm:... \
-  --default-actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:...
-```
-
-#### 5. Register Target
-
-```bash
-aws elbv2 register-targets \
-  --target-group-arn arn:aws:elasticloadbalancing:... \
-  --targets Id=i-xxxxxxxxxxxxx
-```
-
-#### 6. Configure Route 53
-
-```bash
-# Create A record (ALIAS to ALB)
-aws route53 change-resource-record-sets \
-  --hosted-zone-id Z1234567890ABC \
-  --change-batch '{
-    "Changes": [{
-      "Action": "CREATE",
-      "ResourceRecordSet": {
-        "Name": "app.lauv.in",
-        "Type": "A",
-        "AliasTarget": {
-          "HostedZoneId": "Z35SXDOTRQ7X7K",
-          "DNSName": "mern-app-alb-123456789.us-east-1.elb.amazonaws.com",
-          "EvaluateTargetHealth": true
-        }
-      }
-    }]
-  }'
-```
-
-#### Testing
-
-```bash
-# DNS propagation
-dig +short app.lauv.in
-
-# Test HTTP redirect
-curl -I http://app.lauv.in
-
-# Test HTTPS
-curl -I https://app.lauv.in/health
-curl -s https://app.lauv.in/api/health | jq
-
-# Test TLS
-openssl s_client -connect app.lauv.in:443 -servername app.lauv.in
-```
-
-#### Success Criteria
-- DNS resolves to ALB
-- HTTP redirects to HTTPS
-- TLS certificate valid
-- Both `/health` and `/api/health` return 200
-- Target shows healthy in Target Group
+---
 
 </details>
 
