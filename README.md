@@ -446,12 +446,10 @@ You now have real distributed tracing:
 VPC: 10.0.0.0/16
 ├── Public Subnets (2 AZs)
 │   ├── 10.0.1.0/24 (us-east-1a)
-│   ├── 10.0.2.0/24 (us-east-1b)
 │   └── Resources: ALB, NAT Gateway
 └── Private Subnets (2 AZs)
-    ├── 10.0.11.0/24 (us-east-1a)
-    ├── 10.0.12.0/24 (us-east-1b)
-    └── Resources: EC2 instances
+    ├── 10.0.2.0/24 (us-east-1a)
+    └── Resource: EC2 instances
 ```
 
 #### Setup Steps
@@ -533,7 +531,7 @@ VPC: 10.0.0.0/16
 
 ---
 
-### Phase 4️: Private EC2 with Docker
+### Phase 4: Private EC2 with Docker
 
 **Goal:** Launch EC2 in private subnet, accessible only via AWS Systems Manager.
 
@@ -550,40 +548,60 @@ Create role with these policies:
 
 ```bash
 #!/bin/bash
-set -euxo pipefail
+set -euo pipefail
+
+# --- Config you must set before running ---
+: "${MONGO_URI:?Set MONGO_URI in the environment before running this script}"
+
+# Optional: If your default user isn't 'ubuntu', change this.
+DEFAULT_USER="ubuntu"
+
+export DEBIAN_FRONTEND=noninteractive
 
 # Update system
-dnf update -y
+sudo apt-get update -y
+sudo apt-get upgrade -y
 
-# Install Docker
-dnf install -y docker git
-systemctl enable --now docker
-usermod -aG docker ec2-user
+# Install Docker (from Ubuntu repo) + Compose v2 plugin + git + curl
+sudo apt-get install -y docker.io docker-compose-plugin git curl
 
-# Install Docker Compose
-COMPOSE_VERSION="v2.29.2"
-curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" \
-  -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
+# Enable & start Docker
+sudo systemctl enable --now docker
 
-# Clone repository
-mkdir -p /opt/mern
+# Add user to docker group so you can run docker without sudo
+if id -u "${DEFAULT_USER}" >/dev/null 2>&1; then
+  sudo usermod -aG docker "${DEFAULT_USER}"
+fi
+
+# Create app folder and clone repository
+sudo mkdir -p /opt/mern
+sudo chown -R "${DEFAULT_USER}:${DEFAULT_USER}" /opt/mern
 cd /opt/mern
-git clone https://github.com/yourusername/your-repo.git .
 
-# Set up environment (temporary - will use SSM in Phase 7)
-cat > backend/.env << EOF
+# If you already cloned once and are re-running, pull latest; else clone fresh
+if [ -d .git ]; then
+  git pull --rebase
+else
+  git clone https://github.com/yourusername/your-repo.git .
+fi
+
+# Write backend env (temporary — move to SSM later)
+mkdir -p backend
+cat > backend/.env <<EOF
 NODE_ENV=production
 PORT=5000
 MONGO_URI=${MONGO_URI}
 EOF
 
-# Start services
-docker-compose up -d --build
+# Build & start with Compose v2 (note the space: 'docker compose')
+sudo docker compose up -d --build
 
 # Verify
-docker ps
-curl -s http://localhost:8888/health
+sudo docker ps
+curl -sf http://localhost:8888/health || true
+
+echo "Done. If you just added ${DEFAULT_USER} to the docker group, log out and back in (or 'newgrp docker') to use 'docker' without sudo."
+
 ```
 
 #### Launch EC2
