@@ -127,7 +127,7 @@ for i in {1..6}; do curl -s localhost:8888/api/health; done
 
 ## Deployment Phases
 
-### Phase 0️: Baseline & Repository Setup
+### Phase 0: Baseline & Repository Setup
 
 **Goal:** Ensure your application runs correctly before adding infrastructure complexity.
 
@@ -169,7 +169,7 @@ for i in {1..6}; do curl -s localhost:8888/api/health; done
 
 ---
 
-### Phase 1️: Local Docker Setup
+### Phase 1: Local Docker Setup
 
 **Goal:** Mirror production environment locally with Docker Compose.
 
