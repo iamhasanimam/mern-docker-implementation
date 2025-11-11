@@ -858,7 +858,7 @@ curl localhost:8888/health
 
 ### # Phase 5: Application Load Balancer & TLS Setup
 
-**Goal**: Get `https://app.lauv.in` working securely with a real SSL certificate
+**Goal**: Get `https://docker-implementation.lauv.in` working securely with a real SSL certificate
 
 <details>
 <summary>Click to expand Phase 5</summary>
@@ -889,10 +889,10 @@ SSL certificates make the little padlock appear in browsers. AWS gives them for 
 2. Choose **"Request a public certificate"** and click **Next**
 
 ### 1.3 Configure Domain
-1. **Domain name**: Type `app.lauv.in`
+1. **Domain name**: Type `docker-implementation.lauv.in`
    - Don't add `https://` or `www.`
    - Just the bare domain
-2. Click **Add another name to this certificate** if you want `www.app.lauv.in` too (optional)
+2. Click **Add another name to this certificate** if you want `www.docker-implementation.lauv.in` too (optional)
 3. **Validation method**: Select **DNS validation**
    - This is easier and automatic
 4. **Key algorithm**: Leave as **RSA 2048** (default)
@@ -1055,7 +1055,7 @@ You'll see a default listener:
 3. Scroll down to **Secure listener settings**
    - **Security policy**: Leave default (ELBSecurityPolicy-2016-08)
    - **Default SSL/TLS certificate**: Select **From ACM**
-   - Choose your certificate `app.lauv.in` from dropdown
+   - Choose your certificate `docker-implementation.lauv.in` from dropdown
 
 ### 3.7 Create ALB
 1. Scroll to bottom
@@ -1128,7 +1128,7 @@ Fill in:
 
 ## Step 6: Point Domain to ALB (Route 53)
 
-Final step - tell the world where `app.lauv.in` lives.
+Final step - tell the world where `docker-implementation.lauv.in` lives.
 
 ### 6.1 Open Route 53
 1. Search for **"Route 53"** in AWS Console
@@ -1140,7 +1140,7 @@ Final step - tell the world where `app.lauv.in` lives.
 
 **Quick create method:**
 1. **Record name**: Type `app`
-   - This creates `app.lauv.in`
+   - This creates `docker-implementation.lauv.in`
 
 2. **Record type**: Select **A - Routes traffic to IPv4**
 
@@ -1167,21 +1167,21 @@ This takes **5-15 minutes**. Be patient.
 
 Check DNS:
 1. Open **Command Prompt** (Windows) or **Terminal** (Mac/Linux)
-2. Type: `nslookup app.lauv.in`
+2. Type: `nslookup docker-implementation.lauv.in`
 3. You should see your ALB's IP addresses
 
 ### 7.2 Test HTTP Redirect
 1. Open browser
-2. Visit: `http://app.lauv.in` (without 's')
-3. URL should auto-change to `https://app.lauv.in`
+2. Visit: `http://docker-implementation.lauv.in` (without 's')
+3. URL should auto-change to `https://docker-implementation.lauv.in`
 4. You should see a padlock in the address bar
 
 ### 7.3 Test Application
 Try these URLs in your browser:
 
-- `https://app.lauv.in/health` - Should return "OK" or 200
-- `https://app.lauv.in/api/health` - Should return JSON: `{"ok": true}`
-- `https://app.lauv.in/` - Your frontend should load
+- `https://docker-implementation.lauv.in/health` - Should return "OK" or 200
+- `https://docker-implementation.lauv.in/api/health` - Should return JSON: `{"ok": true}`
+- `https://docker-implementation.lauv.in/` - Your frontend should load
 
 ### 7.4 Check Target Health
 1. Go back to **EC2 Console** and click **Target Groups**
@@ -1203,8 +1203,8 @@ Try these URLs in your browser:
 - [ ] ALB status is **"Active"**
 - [ ] HTTP listener redirects to HTTPS
 - [ ] HTTPS listener has ACM certificate attached
-- [ ] DNS resolves: `nslookup app.lauv.in` returns IPs
-- [ ] Browser shows padlock at `https://app.lauv.in`
+- [ ] DNS resolves: `nslookup docker-implementation.lauv.in` returns IPs
+- [ ] Browser shows padlock at `https://docker-implementation.lauv.in`
 - [ ] `/health` returns 200 OK
 - [ ] `/api/health` returns JSON
 - [ ] Frontend loads at root path `/`
@@ -1236,7 +1236,7 @@ Try these URLs in your browser:
 **Fix**:
 1. Wait 15-30 minutes
 2. Clear browser cache (Ctrl+Shift+Delete)
-3. Try: `nslookup app.lauv.in` - do you see IPs?
+3. Try: `nslookup docker-implementation.lauv.in` - do you see IPs?
 
 ### Problem: "Cannot select certificate in ALB listener"
 **Cause**: Certificate in wrong region
@@ -1261,7 +1261,7 @@ Try these URLs in your browser:
 ```
 Internet
    ↓
-Route 53 (app.lauv.in)
+Route 53 (docker-implementation.lauv.in)
    ↓
 Application Load Balancer
    ↓ (HTTPS terminated here)
@@ -1316,7 +1316,7 @@ aws ec2 describe-nat-gateways \
 
 ```bash
 # From EC2 (via Session Manager)
-curl -s https://app.lauv.in/api/health
+curl -s https://docker-implementation.lauv.in/api/health
 
 # Check backend logs for MongoDB connection
 docker logs backend-api-1 | grep -i mongo
@@ -1327,7 +1327,7 @@ docker logs backend-api-1 | grep -i mongo
 ```bash
 # Temporarily remove the IP allowlist entry in Atlas
 # Then test - should fail
-curl -s https://app.lauv.in/api/health
+curl -s https://docker-implementation.lauv.in/api/health
 # Should show database connection error
 
 # Re-add the IP - should recover
@@ -1630,7 +1630,7 @@ aws logs filter-log-events \
 1. **Request Certificate in us-east-1**
    ```bash
    aws acm request-certificate \
-     --domain-name app.lauv.in \
+     --domain-name docker-implementation.lauv.in \
      --validation-method DNS \
      --region us-east-1
    ```
@@ -1770,7 +1770,7 @@ echo "✓ Blue/Green deployment complete!"
 
 ```bash
 # Run this in a separate terminal during deployment
-hey -z 120s -c 10 https://app.lauv.in/api/health
+hey -z 120s -c 10 https://docker-implementation.lauv.in/api/health
 ```
 
 #### Success Criteria
@@ -1805,7 +1805,7 @@ Use this checklist to ensure each phase is complete:
 ### Application Layer
 - [ ] ALB listener on port 443 with valid ACM certificate
 - [ ] Target Group shows "healthy" status
-- [ ] `https://app.lauv.in` resolves and loads correctly
+- [ ] `https://docker-implementation.lauv.in` resolves and loads correctly
 - [ ] Both `/` and `/api/*` routes work through ALB
 - [ ] HTTP automatically redirects to HTTPS
 
@@ -1915,8 +1915,8 @@ docker logs backend-api-1 | grep -i mongo
 **Debug Steps:**
 ```bash
 # Test OPTIONS request
-curl -X OPTIONS https://app.lauv.in/api/users \
-  -H "Origin: https://app.lauv.in" \
+curl -X OPTIONS https://docker-implementation.lauv.in/api/users \
+  -H "Origin: https://docker-implementation.lauv.in" \
   -H "Access-Control-Request-Method: POST" \
   -v
 ```
@@ -1927,7 +1927,7 @@ curl -X OPTIONS https://app.lauv.in/api/users \
 import cors from 'cors';
 
 app.use(cors({
-  origin: 'https://app.lauv.in',
+  origin: 'https://docker-implementation.lauv.in',
   credentials: true
 }));
 ```
