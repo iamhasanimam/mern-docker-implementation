@@ -856,7 +856,7 @@ curl localhost:8888/health
 
 ---
 
-### # Phase 5: Application Load Balancer & TLS Setup
+###  Phase 5: Application Load Balancer & TLS Setup
 
 **Goal**: Get `https://docker-implementation.lauv.in` working securely with a real SSL certificate
 
@@ -1287,7 +1287,7 @@ Backend Containers
 
 ---
 
-### Phase 6️: MongoDB Atlas Security
+### Phase 6: MongoDB Atlas Security
 
 **Goal:** Lock down database access to only your infrastructure.
 
@@ -1343,7 +1343,7 @@ curl -s https://docker-implementation.lauv.in/api/health
 
 ---
 
-### Phase 7️: Secrets Management with SSM
+### Phase 7: Secrets Management with SSM
 
 **Goal:** Remove hardcoded secrets from repository.
 
@@ -1457,7 +1457,7 @@ git push
 
 ---
 
-### Phase 8️: CloudWatch Observability
+### Phase 8: CloudWatch Observability
 
 **Goal:** Centralized logging, metrics, and alerting.
 
@@ -1603,7 +1603,7 @@ aws logs filter-log-events \
 
 ---
 
-### Phase 9️: CloudFront CDN (Optional)
+### Phase 9: CloudFront CDN (Optional)
 
 **Goal:** Add CDN for static assets and edge caching.
 
